@@ -1,3 +1,4 @@
+const stripe = require("stripe")(process.env.STRIPE_SECRET);
 const express = require("express");
 const cors = require("cors");
 const app = express();
@@ -42,8 +43,8 @@ async function run() {
 
     app.get("/parcels/:id", async (req, res) => {
       const id = req.params.id;
-      const query = {_id: new ObjectId(id)};
-      
+      const query = { _id: new ObjectId(id) };
+
       const result = await parcelsCollection.findOne(query);
       res.send(result);
     });
@@ -52,6 +53,29 @@ async function run() {
       const parcel = req.body;
       const result = await parcelsCollection.insertOne(parcel);
       res.status(201).send(result);
+    });
+
+    // payment related apis
+    app.post("/create-checkout-session", async (req, res) => {
+      const paymentInfo = req.body;
+      const session = await stripe.checkout.sessions.create({
+        line_items: [
+          {
+            price_data: {
+              currency: "USD",
+              product_data: {
+                name: paymentInfo.parcelName,
+              },
+              unit_amount: 1500,
+            },
+
+            quantity: 1,
+          },
+        ],
+        customer_email: paymentInfo.senderEmail,
+        mode: "payment",
+        success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success`,
+      });
     });
 
     app.delete("/parcels/:id", async (req, res) => {
