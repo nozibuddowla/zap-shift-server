@@ -1,8 +1,8 @@
+require("dotenv").config();
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 const express = require("express");
 const cors = require("cors");
 const app = express();
-require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 3000;
 
@@ -57,32 +57,54 @@ async function run() {
 
     // payment related apis
     app.post("/create-checkout-session", async (req, res) => {
-      const paymentInfo = req.body;
-      const session = await stripe.checkout.sessions.create({
-        line_items: [
-          {
-            price_data: {
-              currency: "USD",
-              product_data: {
-                name: paymentInfo.parcelName,
-              },
-              unit_amount: 1500,
-            },
+      try {
+        const paymentInfo = req.body;
+        const amount = parseInt(paymentInfo.cost);
 
-            quantity: 1,
+        if (isNaN(amount) || amount <= 0) {
+          return res.status(400).send({ error: "Invalid cost amount" });
+        }
+
+        const session = await stripe.checkout.sessions.create({
+          line_items: [
+            {
+              price_data: {
+                currency: "usd",
+                product_data: {
+                  name: paymentInfo.parcelName || "Parcel Delivery",
+                },
+                unit_amount: amount * 100,
+              },
+              quantity: 1,
+            },
+          ],
+          customer_email: paymentInfo.senderEmail,
+          mode: "payment",
+          metadata: {
+            parcelId: paymentInfo.parcelId,
           },
-        ],
-        customer_email: paymentInfo.senderEmail,
-        mode: "payment",
-        success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success`,
-      });
+          success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success`,
+          cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
+        });
+
+        res.send({ id: session.id, url: session.url });
+      } catch (error) {
+        res.status(500).send({ error: error.message });
+      }
     });
 
     app.delete("/parcels/:id", async (req, res) => {
       const id = req.params.id;
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ error: "Invalid ID format" });
+      }
       const query = { _id: new ObjectId(id) };
-      const result = await parcelsCollection.deleteOne(query);
-      res.send(result);
+      try {
+        const result = await parcelsCollection.deleteOne(query);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to delete parcel" });
+      }
     });
 
     // Send a ping to confirm a successful connection
