@@ -70,20 +70,22 @@ async function run() {
             {
               price_data: {
                 currency: "usd",
-                product_data: {
-                  name: paymentInfo.parcelName || "Parcel Delivery",
-                },
                 unit_amount: amount * 100,
+                product_data: {
+                  name:
+                    `Please pay for: ${paymentInfo.parcelName}` ||
+                    "Parcel Delivery",
+                },
               },
               quantity: 1,
             },
           ],
-          customer_email: paymentInfo.senderEmail,
           mode: "payment",
           metadata: {
             parcelId: paymentInfo.parcelId,
           },
-          success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success`,
+          customer_email: paymentInfo.senderEmail,
+          success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
         });
 
@@ -105,6 +107,24 @@ async function run() {
       } catch (error) {
         res.status(500).send({ error: "Failed to delete parcel" });
       }
+    });
+
+    app.patch("/payment-success", async (req, res) => {
+      const sessionId = req.query.session_id;
+
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      console.log("session retrieved", session);
+
+      if (session.payment_status === "paid") {
+        const id = session.metadata.parcelId;
+        const query = { _id: new ObjectId(id) };
+        const update = { $set: { paymentStatus: "paid" } };
+        const result = await parcelsCollection.updateOne(query, update);
+        res.send(result)
+      }
+      res.send({
+        success: false,
+      });
     });
 
     // Send a ping to confirm a successful connection
