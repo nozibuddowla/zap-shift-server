@@ -15,12 +15,7 @@ const generateTrackingId = () => {
 
 // middleware
 app.use(express.json());
-app.use(
-  cors({
-    origin: ["http://localhost:5173", "https://zapshift-nozib.netlify.app"],
-    credentials: true,
-  }),
-);
+app.use(cors());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@simple-curd-cluster.oq47ln2.mongodb.net/?appName=simple-curd-cluster`;
 
