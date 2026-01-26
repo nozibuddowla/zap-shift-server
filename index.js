@@ -15,7 +15,13 @@ const generateTrackingId = () => {
 
 // middleware
 app.use(express.json());
-app.use(cors());
+// app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "https://zapshift-nozib.netlify.app"],
+    credentials: true,
+  }),
+);
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@simple-curd-cluster.oq47ln2.mongodb.net/?appName=simple-curd-cluster`;
 
@@ -31,7 +37,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    // await client.connect();
+    await client.connect();
 
     const parcelDB = client.db("zapShiftDB");
     const parcelsCollection = parcelDB.collection("parcels");
@@ -51,6 +57,9 @@ async function run() {
 
     app.get("/parcels/:id", async (req, res) => {
       const id = req.params.id;
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ error: "Invalid ID" });
+      }
       const query = { _id: new ObjectId(id) };
 
       const result = await parcelsCollection.findOne(query);
@@ -183,9 +192,9 @@ async function run() {
 
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!",
-    );
+    console.log("Connected to MongoDB successfully!");
+  } catch (error) {
+    console.error("MongoDB Connection Error:", error);
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
@@ -194,9 +203,10 @@ async function run() {
 run().catch(console.dir);
 
 app.get("/", (req, res) => {
-  res.send("Hello World, zap is shifting!");
+  res.send("zapShift API is running...");
 });
 
+// Port listener
 app.listen(port, () => {
   console.log(`zapShift app listening on port ${port}`);
 });
