@@ -134,9 +134,10 @@ async function run() {
 
           const parcel = await parcelsCollection.findOne(query);
 
-          if (parcel.paymentStatus === "paid") {
+          if (parcel && parcel.paymentStatus === "paid") {
             return res.send({
               success: true,
+              message: "Payment already processed",
               trackingId: parcel.trackingId,
               transactionId: session.payment_intent,
             });
