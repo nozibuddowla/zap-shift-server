@@ -6,9 +6,21 @@ const app = express();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 3000;
 
+const generateTrackingId = () => {
+  const prefix = "ZAP";
+  const timestamp = Date.now().toString().slice(-8);
+  const randomStr = Math.random().toString(36).substring(2, 5).toUpperCase();
+  return `${prefix}-${timestamp}-${randomStr}`;
+};
+
 // middleware
 app.use(express.json());
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "https://zapshift-nozib.netlify.app/"],
+    credentials: true,
+  }),
+);
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@simple-curd-cluster.oq47ln2.mongodb.net/?appName=simple-curd-cluster`;
 
@@ -24,7 +36,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
     const parcelDB = client.db("zapShiftDB");
     const parcelsCollection = parcelDB.collection("parcels");
@@ -112,44 +124,69 @@ async function run() {
     });
 
     app.patch("/payment-success", async (req, res) => {
-      const sessionId = req.query.session_id;
+      try {
+        const { session_id } = req.query;
+        if (!session_id) {
+          return res.status(400).send({ error: "No session ID" });
+        }
 
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
-      console.log("session retrieved", session);
-
-      if (session.payment_status === "paid") {
-        const id = session.metadata.parcelId;
-        const query = { _id: new ObjectId(id) };
-        const update = { $set: { paymentStatus: "paid" } };
-        const result = await parcelsCollection.updateOne(query, update);
-        const payment = {
-          amount: session.amount_total / 100,
-          currency: session.currency,
-          customerEmail: session.customer_email,
-          parcelId: session.metadata.parcelId,
-          parcelName: session.metadata.parcelName,
-          transactionId: session.payment_intent,
-          paymentStatus: session.payment_status,
-          paidAt: new Date(),
-          trackingId: ""
-        };
+        const session = await stripe.checkout.sessions.retrieve(session_id);
+        // console.log("session retrieved", session);
 
         if (session.payment_status === "paid") {
+          const parcelId = session.metadata.parcelId;
+          const query = { _id: new ObjectId(parcelId) };
+
+          const parcel = await parcelsCollection.findOne(query);
+
+          if (parcel.paymentStatus === "paid") {
+            return res.send({
+              success: true,
+              trackingId: parcel.trackingId,
+              transactionId: session.payment_intent,
+            });
+          }
+
+          const trackingId = generateTrackingId();
+          const update = {
+            $set: { paymentStatus: "paid", trackingId: trackingId },
+          };
+
+          const result = await parcelsCollection.updateOne(query, update);
+
+          const payment = {
+            amount: session.amount_total / 100,
+            currency: session.currency,
+            customerEmail: session.customer_email,
+            parcelId: parcelId,
+            parcelName: session.metadata.parcelName,
+            transactionId: session.payment_intent,
+            paymentStatus: session.payment_status,
+            paidAt: new Date(),
+          };
+
           const resultPayment = await paymentCollection.insertOne(payment);
-          res.send({
+
+          return res.send({
             success: true,
             modifyParcel: result,
+            trackingId: trackingId,
+            transactionId: session.payment_intent,
             paymentInfo: resultPayment,
           });
         }
+
+        res
+          .status(400)
+          .send({ success: false, message: "Payment not verified" });
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: "Internal Server Error" });
       }
-      res.send({
-        success: false,
-      });
     });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
     );
@@ -167,3 +204,5 @@ app.get("/", (req, res) => {
 app.listen(port, () => {
   console.log(`zapShift app listening on port ${port}`);
 });
+
+module.exports = app;
