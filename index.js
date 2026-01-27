@@ -5,6 +5,14 @@ const cors = require("cors");
 const app = express();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 3000;
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./zap-shift-firebase-adminsdk.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
 
 const generateTrackingId = () => {
   const prefix = "ZAP";
@@ -15,13 +23,15 @@ const generateTrackingId = () => {
 
 // middleware
 app.use(express.json());
-// app.use(cors());
-app.use(
-  cors({
-    origin: ["http://localhost:5173", "https://zapshift-nozib.netlify.app"],
-    credentials: true,
-  }),
-);
+app.use(cors());
+
+const verifyFBToken = (req, res, next) => {
+  const token = req.headers.authorization;
+  if (!token) {
+    return res.status(401).send({message: "unauthorized access"})
+  }
+  next();
+}
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@simple-curd-cluster.oq47ln2.mongodb.net/?appName=simple-curd-cluster`;
 
@@ -37,7 +47,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
     const parcelDB = client.db("zapShiftDB");
     const parcelsCollection = parcelDB.collection("parcels");
@@ -66,7 +76,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/payments", async (req, res) => {
+    app.get("/payments", verifyFBToken, async (req, res) => {
       const email = req.query.email;
       const query = {};
       if (email) {
