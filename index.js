@@ -184,6 +184,7 @@ async function run() {
             customerEmail: session.customer_email,
             parcelId: parcelId,
             parcelName: session.metadata.parcelName,
+            trackingId: trackingId,
             transactionId: session.payment_intent,
             paymentStatus: session.payment_status,
             paidAt: new Date(),
