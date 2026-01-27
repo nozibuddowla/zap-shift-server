@@ -66,6 +66,16 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/payments", async (req, res) => {
+      const email = req.query.email;
+      const query = {};
+      if (email) {
+        query.customerEmail = email;
+      }
+      const result = await paymentCollection.find(query).toArray();
+      res.send(result);
+    });
+
     app.post("/parcels", async (req, res) => {
       const parcel = req.body;
       const result = await parcelsCollection.insertOne(parcel);
@@ -116,7 +126,7 @@ async function run() {
 
         res.send({ id: session.id, url: session.url });
       } catch (error) {
-            console.error("Stripe error:", error);
+        console.error("Stripe error:", error);
 
         res.status(500).send({ error: error.message });
       }
