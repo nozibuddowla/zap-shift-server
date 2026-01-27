@@ -7,11 +7,22 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 3000;
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./zap-shift-firebase-adminsdk.json");
+// const serviceAccount = require("./zap-shift-firebase-adminsdk.json");
+let serviceAccount;
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  // Use the Environment Variable in Production (Vercel)
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else {
+  // Use the local file for Local Development
+  serviceAccount = require("./zap-shift-firebase-adminsdk.json");
+}
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+}
 
 
 const generateTrackingId = () => {
