@@ -7,23 +7,25 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 3000;
 const admin = require("firebase-admin");
 
-// const serviceAccount = require("./zap-shift-firebase-adminsdk.json");
 let serviceAccount;
 
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  // Use the Environment Variable in Production (Vercel)
-  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-} else {
-  // Use the local file for Local Development
-  serviceAccount = require("./zap-shift-firebase-adminsdk.json");
-}
+try {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    // This is what Vercel will use
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } else {
+    // This is what you will use locally
+    serviceAccount = require("./zap-shift-firebase-adminsdk.json");
+  }
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    });
+  }
+} catch (error) {
+  console.error("Firebase Admin Initialization Error:", error.message);
 }
-
 
 const generateTrackingId = () => {
   const prefix = "ZAP";
@@ -36,13 +38,26 @@ const generateTrackingId = () => {
 app.use(express.json());
 app.use(cors());
 
-const verifyFBToken = (req, res, next) => {
-  const token = req.headers.authorization;
-  if (!token) {
-    return res.status(401).send({message: "unauthorized access"})
+const verifyFBToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res
+        .status(401)
+        .send({ message: "Unauthorized access - No token provided" });
+    }
+    const token = authHeader.split("Bearer ")[1];
+
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    req.user = decodedToken;
+    next();
+  } catch (error) {
+    console.error("Token verification error:", error);
+    return res
+      .status(401)
+      .send({ message: "Unauthorized access - Invalid token" });
   }
-  next();
-}
+};
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@simple-curd-cluster.oq47ln2.mongodb.net/?appName=simple-curd-cluster`;
 
@@ -89,10 +104,12 @@ async function run() {
 
     app.get("/payments", verifyFBToken, async (req, res) => {
       const email = req.query.email;
-      const query = {};
-      if (email) {
-        query.customerEmail = email;
+      if (req.user.email !== email) {
+        return res.status(403).send({ message: "Forbidden access" });
       }
+
+      const query = { customerEmail: email };
+
       const result = await paymentCollection.find(query).toArray();
       res.send(result);
     });
