@@ -82,6 +82,13 @@ async function run() {
           return res.status(400).send({ error: "Invalid cost amount" });
         }
 
+        const successUrl =
+          paymentInfo.successUrl ||
+          `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`;
+        const cancelUrl =
+          paymentInfo.cancelUrl ||
+          `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`;
+
         const session = await stripe.checkout.sessions.create({
           line_items: [
             {
@@ -103,12 +110,14 @@ async function run() {
             parcelName: paymentInfo.parcelName,
           },
           customer_email: paymentInfo.senderEmail,
-          success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
+          success_url: successUrl,
+          cancel_url: cancelUrl,
         });
 
         res.send({ id: session.id, url: session.url });
       } catch (error) {
+            console.error("Stripe error:", error);
+
         res.status(500).send({ error: error.message });
       }
     });
