@@ -49,7 +49,10 @@ const verifyFBToken = async (req, res, next) => {
     const token = authHeader.split("Bearer ")[1];
 
     const decodedToken = await admin.auth().verifyIdToken(token);
+    // console.log("decoded in the token", decodedToken);
+    
     req.user = decodedToken;
+    req.decoded_email = decodedToken.email;
     next();
   } catch (error) {
     console.error("Token verification error:", error);
@@ -104,7 +107,7 @@ async function run() {
 
     app.get("/payments", verifyFBToken, async (req, res) => {
       const email = req.query.email;
-      if (req.user.email !== email) {
+      if (req.decoded_email !== email) {
         return res.status(403).send({ message: "Forbidden access" });
       }
 
