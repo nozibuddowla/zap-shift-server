@@ -39,18 +39,22 @@ app.use(express.json());
 app.use(cors());
 
 const verifyFBToken = async (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res
-        .status(401)
-        .send({ message: "Unauthorized access - No token provided" });
-    }
-    const token = authHeader.split("Bearer ")[1];
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res
+      .status(401)
+      .send({ message: "Unauthorized access - No token provided" });
+  }
 
+  const token = authHeader.split("Bearer ")[1];
+
+  try {
+    if (!admin.apps.length) {
+      return res.status(500).send({message: "Firebase not initialized"})
+    }
     const decodedToken = await admin.auth().verifyIdToken(token);
     // console.log("decoded in the token", decodedToken);
-    
+
     req.user = decodedToken;
     req.decoded_email = decodedToken.email;
     next();
@@ -79,6 +83,7 @@ async function run() {
     // await client.connect();
 
     const parcelDB = client.db("zapShiftDB");
+    const usersCollection = parcelDB.collection("users");
     const parcelsCollection = parcelDB.collection("parcels");
     const paymentCollection = parcelDB.collection("payments");
 
@@ -113,7 +118,10 @@ async function run() {
 
       const query = { customerEmail: email };
 
-      const result = await paymentCollection.find(query).toArray();
+      const result = await paymentCollection
+        .find(query)
+        .sort({ paidAt: -1 })
+        .toArray();
       res.send(result);
     });
 
@@ -170,6 +178,32 @@ async function run() {
         console.error("Stripe error:", error);
 
         res.status(500).send({ error: error.message });
+      }
+    });
+
+    app.post("/users", async (req, res) => {
+      try {
+        const user = req.body;
+
+        const query = { email: user.email };
+        const existingUser = await usersCollection.findOne(query);
+        if (existingUser) {
+          return res.send({ message: "User already exists", insertedId: null });
+        }
+
+        const newUser = {
+          displayName: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL,
+          role: "user",
+          createdAt: new Date(),
+        };
+
+        const result = await usersCollection.insertOne(newUser);
+        res.status(201).send(result);
+      } catch (error) {
+        console.error("Error saving user:", error);
+        res.status(500).send({ error: "Failed to save user" });
       }
     });
 
